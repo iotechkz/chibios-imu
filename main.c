@@ -69,9 +69,9 @@ static msg_t Thread1(void *arg) {
     (void)arg;
     chRegSetThreadName("blinker");
     while (TRUE) {
-      palSetPad(GPIOD, GPIOD_LED4);       /* Orange.  */
+      palSetPad(GPIOD, GPIOD_LED4);
       chThdSleepMilliseconds(500);
-      palClearPad(GPIOD, GPIOD_LED4);     /* Orange.  */
+      palClearPad(GPIOD, GPIOD_LED4);
       chThdSleepMilliseconds(500);
     }
 }
@@ -205,7 +205,7 @@ uint8_t HMC5883L_I2C_BytesRead(uint8_t slaveAddr, uint8_t* txBuffer) {
 }
 
 void HMC5883L_I2C_DataRead(uint8_t slaveAddr, uint8_t bytesNum) {
-    i2cAcquireBus(&I2C_DRIVER);     // Получение эксклюзивного доступа к шине I2C
+    //i2cAcquireBus(&I2C_DRIVER);     // Получение эксклюзивного доступа к шине I2C
                                     // In order to use this function the option I2C_USE_MUTUAL_EXCLUSION must be enabled.
     /**
      * i2cMasterReceiveTimeout -- функция чтения в буфер приема 6-ти байт
@@ -216,7 +216,7 @@ void HMC5883L_I2C_DataRead(uint8_t slaveAddr, uint8_t bytesNum) {
                                           bytesNum,     // Количество байт для приема
                                           TIMEOUT       // Количество тиков перед операцией таймаута, доступно TIME_INFINITE без таймаута
                                         );
-    i2cReleaseBus(&I2C_DRIVER);     // Освобождает доступ к шине I2C
+    //i2cReleaseBus(&I2C_DRIVER);     // Освобождает доступ к шине I2C
 
     if (status != RDY_OK) { // если функция завершилась с ошибками, получаем ошибки
         errors = i2cGetErrors(&I2C_DRIVER);
@@ -263,7 +263,7 @@ int main(void) {
     halInit();
     chSysInit();
     I2C1_Init();		//Вызываем инициализацию I2C1
-    HMC5883_Init();	//Вызываем инициализацию HMC5883L магнитометра
+    HMC5883_Init();	    //Вызываем инициализацию HMC5883L магнитометра
     chThdSleepMilliseconds(10);
 
     // Запускаем Serial2 отладочную печать в консоль
@@ -284,17 +284,16 @@ int main(void) {
      */
     i2cAcquireBus(&I2C_DRIVER);
     while (TRUE) {
-
-        //status = i2cMasterReceiveTimeout(&I2C_DRIVER, HMC5883L_DEFAULT_ADDRESS, rxbuf, 6, TIMEOUT);
+        //status = i2cMasterReceiveTimeout(&I2C_DRIVER, HMC5883L_DEFAULT_ADDRESS, rxbuf, 6, TIME_INFINITE);
         HMC5883L_I2C_DataRead(HMC5883L_DEFAULT_ADDRESS, 6);
 
         dataX = complement2signed(rxbuf[0], rxbuf[1]);
-        dataY = complement2signed(rxbuf[2], rxbuf[3]);
-        dataZ = complement2signed(rxbuf[4], rxbuf[5]);
+        dataZ = complement2signed(rxbuf[2], rxbuf[3]);
+        dataY = complement2signed(rxbuf[4], rxbuf[5]);
 
-        chprintf((BaseSequentialStream *) &SD2, "%d ", dataX);
-        chprintf((BaseSequentialStream *) &SD2, "%d ", dataY);
-        chprintf((BaseSequentialStream *) &SD2, "%d\r", dataZ);
+        //chprintf((BaseSequentialStream *) &SD2, "%d ", dataX);
+        //chprintf((BaseSequentialStream *) &SD2, "%d ", dataY);
+        //chprintf((BaseSequentialStream *) &SD2, "%d\r", dataZ);
         /*x = dataX * 0.92;
         y = dataY * 0.92;
         z = dataZ * 0.92;*/
@@ -311,14 +310,11 @@ int main(void) {
 
         deg = (uint16_t)(angle * (180 / PI));
 
-        //chprintf((BaseSequentialStream *) &SD2, " %d\r", deg);
+        chprintf((BaseSequentialStream *) &SD2, " %d\r", deg);
 
         txbuf[0] = HMC5883L_DATA_OUT_X_MSB_REG;
         status = i2cMasterTransmitTimeout(&I2C_DRIVER, HMC5883L_DEFAULT_ADDRESS, txbuf, 1, rxbuf, 0, TIMEOUT);
 
-
-        chThdSleepMilliseconds(80);
-
-
+        chThdSleepMilliseconds(80);     // Задержка для считывания новых данных, заменить на пин прерывания DRDY
     }
 }
