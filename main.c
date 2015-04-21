@@ -66,14 +66,14 @@ typedef enum {
  */
 static WORKING_AREA(waThread1, 128);
 static msg_t Thread1(void *arg) {
-  (void)arg;
-  chRegSetThreadName("blinker");
-  while (TRUE) {
-    palSetPad(GPIOD, GPIOD_LED4);       /* Orange.  */
-    chThdSleepMilliseconds(500);
-    palClearPad(GPIOD, GPIOD_LED4);     /* Orange.  */
-    chThdSleepMilliseconds(500);
-  }
+    (void)arg;
+    chRegSetThreadName("blinker");
+    while (TRUE) {
+      palSetPad(GPIOD, GPIOD_LED4);       /* Orange.  */
+      chThdSleepMilliseconds(500);
+      palClearPad(GPIOD, GPIOD_LED4);     /* Orange.  */
+      chThdSleepMilliseconds(500);
+    }
 }
 
 // Инициализируем I2C1
@@ -204,6 +204,26 @@ uint8_t HMC5883L_I2C_BytesRead(uint8_t slaveAddr, uint8_t* txBuffer) {
 	return rxBuffer;
 }
 
+void HMC5883L_I2C_DataRead(uint8_t slaveAddr, uint8_t bytesNum) {
+    i2cAcquireBus(&I2C_DRIVER);     // Получение эксклюзивного доступа к шине I2C
+                                    // In order to use this function the option I2C_USE_MUTUAL_EXCLUSION must be enabled.
+    /**
+     * i2cMasterReceiveTimeout -- функция чтения в буфер приема 6-ти байт
+     */
+    status = i2cMasterReceiveTimeout    ( &I2C_DRIVER,  // Указатель на объект I2CDriver
+                                          slaveAddr,    // Slave адресс устройства (7 бит) без бита чтения/записи R/W
+                                          rxbuf,        // Указатель на буффер передачи
+                                          bytesNum,     // Количество байт для приема
+                                          TIMEOUT       // Количество тиков перед операцией таймаута, доступно TIME_INFINITE без таймаута
+                                        );
+    i2cReleaseBus(&I2C_DRIVER);     // Освобождает доступ к шине I2C
+
+    if (status != RDY_OK) { // если функция завершилась с ошибками, получаем ошибки
+        errors = i2cGetErrors(&I2C_DRIVER);
+        chprintf((BaseSequentialStream *) &SD2, " %x", errors);
+    }
+}
+
 int16_t complement2signed(uint8_t msb, uint8_t lsb){
   uint16_t word = 0;
   word = (msb << 8) + lsb;
@@ -234,70 +254,71 @@ int16_t complement2signed(uint8_t msb, uint8_t lsb){
 // Application entry point.
 int main(void) {
   /*
-   * System initializations.
-   * - HAL initialization, this also initializes the configured device drivers
-   *   and performs the board-specific initializations.
-   * - Kernel initialization, the main() function becomes a thread and the
-   *   RTOS is active.
-   */
-  halInit();
-  chSysInit();
-  I2C1_Init();		//Вызываем инициализацию I2C1
-  HMC5883_Init();	//Вызываем инициализацию HMC5883L магнитометра
-  chThdSleepMilliseconds(10);
+     * System initializations.
+     * - HAL initialization, this also initializes the configured device drivers
+     *   and performs the board-specific initializations.
+     * - Kernel initialization, the main() function becomes a thread and the
+     *   RTOS is active.
+     */
+    halInit();
+    chSysInit();
+    I2C1_Init();		//Вызываем инициализацию I2C1
+    HMC5883_Init();	//Вызываем инициализацию HMC5883L магнитометра
+    chThdSleepMilliseconds(10);
 
-  // Запускаем Serial2 отладочную печать
-  sdStart(&SD2, NULL);
-  palSetPadMode(GPIOA, 2, PAL_MODE_ALTERNATE(7));
-  palSetPadMode(GPIOA, 3, PAL_MODE_ALTERNATE(7));
+    // Запускаем Serial2 отладочную печать в консоль
+    sdStart(&SD2, NULL);
+    palSetPadMode(GPIOA, 2, PAL_MODE_ALTERNATE(7));
+    palSetPadMode(GPIOA, 3, PAL_MODE_ALTERNATE(7));
 
-  int16_t dataX = 0, dataY = 0, dataZ = 0;
+    int16_t dataX = 0, dataY = 0, dataZ = 0;
 
-  /*
-   * Creates the example thread.
-   */
-  chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO, Thread1, NULL); // Запускаем поток для мигания светодиодом
+    /*
+     * Creates the example thread.
+     */
+    chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO, Thread1, NULL); // Запускаем поток для мигания светодиодом
 
-  /*
-   * Normal main() thread activity, in this demo it does nothing except
-   * sleeping in a loop.
-   */
-  i2cAcquireBus(&I2C_DRIVER);
-  while (TRUE) {
+    /*
+     * Normal main() thread activity, in this demo it does nothing except
+     * sleeping in a loop.
+     */
+    i2cAcquireBus(&I2C_DRIVER);
+    while (TRUE) {
 
-	  status = i2cMasterReceiveTimeout(&I2C_DRIVER, HMC5883L_DEFAULT_ADDRESS, rxbuf, 6, TIMEOUT);
+        //status = i2cMasterReceiveTimeout(&I2C_DRIVER, HMC5883L_DEFAULT_ADDRESS, rxbuf, 6, TIMEOUT);
+        HMC5883L_I2C_DataRead(HMC5883L_DEFAULT_ADDRESS, 6);
 
-	  dataX = complement2signed(rxbuf[0], rxbuf[1]);
-	  dataY = complement2signed(rxbuf[2], rxbuf[3]);
-	  dataZ = complement2signed(rxbuf[4], rxbuf[5]);
+        dataX = complement2signed(rxbuf[0], rxbuf[1]);
+        dataY = complement2signed(rxbuf[2], rxbuf[3]);
+        dataZ = complement2signed(rxbuf[4], rxbuf[5]);
 
-	  chprintf((BaseSequentialStream *) &SD2, "%d ", dataX);
-	  chprintf((BaseSequentialStream *) &SD2, "%d ", dataY);
-	  chprintf((BaseSequentialStream *) &SD2, "%d\r", dataZ);
-	  /*x = dataX * 0.92;
-	  y = dataY * 0.92;
-	  z = dataZ * 0.92;*/
+        chprintf((BaseSequentialStream *) &SD2, "%d ", dataX);
+        chprintf((BaseSequentialStream *) &SD2, "%d ", dataY);
+        chprintf((BaseSequentialStream *) &SD2, "%d\r", dataZ);
+        /*x = dataX * 0.92;
+        y = dataY * 0.92;
+        z = dataZ * 0.92;*/
 
-	  x = dataX; y = dataY; z = dataZ;
+        x = dataX; y = dataY; z = dataZ;
 
-	  // считаем угол
-	  angle = atan2(y, x);
-	  if (angle < 0)
-		  angle += 2*PI;
+        // считаем угол
+        angle = atan2(y, x);
+        if (angle < 0)
+            angle += 2*PI;
 
-	  if (angle > 2*PI)
-	      angle -= 2*PI;
+        if (angle > 2*PI)
+            angle -= 2*PI;
 
-	  deg = (uint16_t)(angle * (180 / PI));
+        deg = (uint16_t)(angle * (180 / PI));
 
-	  //chprintf((BaseSequentialStream *) &SD2, " %d\r", deg);
+        //chprintf((BaseSequentialStream *) &SD2, " %d\r", deg);
 
-	  txbuf[0] = HMC5883L_DATA_OUT_X_MSB_REG;
-	  status = i2cMasterTransmitTimeout(&I2C_DRIVER, HMC5883L_DEFAULT_ADDRESS, txbuf, 1, rxbuf, 0, TIMEOUT);
-
-
-	  chThdSleepMilliseconds(80);
+        txbuf[0] = HMC5883L_DATA_OUT_X_MSB_REG;
+        status = i2cMasterTransmitTimeout(&I2C_DRIVER, HMC5883L_DEFAULT_ADDRESS, txbuf, 1, rxbuf, 0, TIMEOUT);
 
 
-  }
+        chThdSleepMilliseconds(80);
+
+
+    }
 }
