@@ -94,11 +94,53 @@ void I2C1_Init() {
 
 // Инициализируем HMC5883L
 void HMC5883_Init() {
+    /**
+     * Configuration Register A
+     * Location     |    Name      |     Description
+     * CRA7         |    CRA7      |     Reserved, always 0
+     * CRA6-CRA5    |    MA1-MA0   |     Число замеров перед усреднением 00 = 1(default), 01 = 2, 10 = 4, 11 = 8
+     * CRA4-CRA2    |    DO2-DO0   |     Data Output Rate. Скорость с которой данные пишутся в выходные регистры
+     * CRA1-CRA0    |    MS1-MS0   |     Measurement Configuration Bits (не понял, надо внимательней читать даташит)
+     *
+     * DO2  |  DO1  |  DO0  |  Typical Data Output Rate(Hz)
+     * 0        0       0       0.75
+     * 0        0       1       1.5
+     * 0        1       0       3
+     * 0        1       1       7.5
+     * 1        0       0       15 (Default)
+     * 1        0       1       30
+     * 1        1       0       75
+     * 1        1       1       Reserved
+     */
+    txbuf[0] = HMC5883L_CONF_REGA;      // Указываем адрес регистра
+    txbuf[1] = 0x18;                    // Данные для записи в регистр, DOR = 75Hz
+    HMC5883L_I2C_BytesWrite(HMC5883L_DEFAULT_ADDRESS, &txbuf);  // Записываем биты конфигурации HMC5883L в регистр CRA
+    /**
+     * Configuration Register B
+     * Location     |    Name      |     Description
+     * CRB7-CRB5    |    GN2-GN0   |     Gain Configuration Bits. Биты установки усиления, общее для всех каналов
+     * CRB4-CRB0    |    0         |     Эти биты должны быть 0 для корректной работы
+     *
+     * Таблица gain и resolution в даташите.
+     * GN[2-0] = 001    1090 (Default)
+     */
 	txbuf[0] = HMC5883L_CONF_REGB;
-	txbuf[1] = 0x00;
-	HMC5883L_I2C_BytesWrite(HMC5883L_DEFAULT_ADDRESS, &txbuf);	// Записываем биты конфигурации HMC5883L
+	txbuf[1] = 0x20;                    // Данные для записи в регистр CRB, GN[2-0] = 001
+	HMC5883L_I2C_BytesWrite(HMC5883L_DEFAULT_ADDRESS, &txbuf);	// Записываем биты конфигурации HMC5883L в регистра CRB
+	/**
+	 * Mode Register
+	 * Location     |    Name      |     Description
+	 * MR7-MR2      |    HS        |     Включение High Speed I2C, 3400kHz
+	 * MR1-MR0      |    MD1-MD0   |     Mode Select Bits, биты выбора режима работы
+	 *
+	 * MD1  |  MD0  |  Operation Mode
+	 * 0        0       Continuous-Measurement Mode. Данные пишутся непрерывно в регистры выходных данных
+	 * 0        1       Single-Measurement Mode(Default)
+	 * 1        0       Idle Mode
+	 * 1        1       Idle Mode
+	 */
 	txbuf[0] = HMC5883L_MODE_REG;
-	txbuf[1] = 0x00;
+	txbuf[1] = 0x00;                   // Данные для записи в регистр Mode, MD[1-0] = 00 - Continuous-Measurement Mode
 	HMC5883L_I2C_BytesWrite(HMC5883L_DEFAULT_ADDRESS, &txbuf);	// Записываем биты конфигурации HMC5883L
 }
 
